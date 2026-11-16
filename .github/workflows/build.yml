@@ -28,3 +28,17 @@ jobs:
           name: smalltv-firmware
           path: .esphome/build/smalltv/.pioenvs/smalltv/firmware.factory.bin
           if-no-files-found: warn
+
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install ESPHome and SDL
+        run: |
+          sudo apt-get update && sudo apt-get install -y libsdl2-dev
+          pip install esphome
+      - name: Compile the PC preview
+        run: esphome compile preview/preview.yaml

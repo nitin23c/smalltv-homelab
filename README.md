@@ -1,5 +1,9 @@
 # smalltv-homelab
 
+<p align="center">
+  <img src="docs/images/ok.gif" width="300" alt="The screen: New York clock, sunny weather, all 26 services up, Pi-hole blocking 13%">
+</p>
+
 ESPHome firmware that turns a cheap ESP8266 "SmallTV" / "Smart Weather Clock"
 desk display (240×240 colour screen) into a homelab status screen:
 
@@ -15,22 +19,32 @@ desk display (240×240 colour screen) into a homelab status screen:
 Everything is configured from the web page. Nothing about your network is
 compiled into the firmware.
 
-## Screen layout
+## Screenshots
 
-```
-┌──────────────────────────────┐
-│ ☀ New York            Mon 16 │
-│ 08:14 AM          (animated) │
-│                           2° │
-│ Clear            H 12°  L 0° │
-│ ━━━━━━━━━━──────────────────── │  day progress
-│ ┌ SERVICES ──┐ ┌ PI-HOLE ───┐ │
-│ │   ◜26◝     │ │   ◜13%◝    │ │
-│ │   OF 26    │ │            │ │
-│ │   All up   │ │ 12k blocked│ │
-│ └────────────┘ └────────────┘ │
-└──────────────────────────────┘
-```
+These come from the real drawing code (`include/screen.h`), rendered on a PC
+with demo data. See [Preview on your PC](#preview-on-your-pc).
+
+| All services up | Something down | Night |
+|:---:|:---:|:---:|
+| <img src="docs/images/ok.png" width="240" alt="Day view, all services up"> | <img src="docs/images/down.png" width="240" alt="Two services down, red card naming one of them, rain"> | <img src="docs/images/night.gif" width="240" alt="Night view with moon, twinkling stars, below-zero temperature"> |
+
+**Animated weather icons:** sun, partly cloudy, cloudy, rain, snow, thunderstorm, fog.
+
+<p align="center">
+  <img src="docs/images/weather.gif" width="300" alt="The weather icon cycling through every condition">
+</p>
+
+**First start:** before Wi-Fi is set up, the screen shows the setup hotspot and its password.
+
+<p align="center">
+  <img src="docs/images/setup.png" width="240" alt="Wi-Fi setup screen with hotspot name and password">
+</p>
+
+### Settings page (on a phone)
+
+| Status | Data sources |
+|:---:|:---:|
+| <img src="docs/images/page-status.png" width="290" alt="Settings page: status, clock and weather"> | <img src="docs/images/page-settings.png" width="290" alt="Settings page: Gatus and Pi-hole sources"> |
 
 ## Hardware
 
@@ -83,7 +97,7 @@ You need Python 3 and [ESPHome](https://esphome.io/) (`pip install esphome`).
 |---|---|
 | Location name | Typing a new city looks it up (Open-Meteo geocoding, from your phone's browser) and sets the weather location and time zone |
 | Time zone | Search 300+ zones, or paste a POSIX rule such as `IST-5:30` |
-| Temperature | °C or °F |
+| Temperature | °C or °F, shown after the number on the screen |
 | NTP servers | Up to three, comma separated; empty uses `pool.ntp.org` |
 | Gatus URL | e.g. `http://gatus.lan:8080`; the endpoint list must be readable without login |
 | Pi-hole 1 / 2 | URL and password. An [app password](https://docs.pi-hole.net/api/auth/) is better than the admin password |
@@ -103,8 +117,24 @@ the sensors if you add the `api:` component.
 - `include/weather_icon.h`: Open-Meteo client and the animated icon. The icon is
   drawn into a 48×48 buffer and pushed straight to the panel five times a second,
   so the rest of the screen is not redrawn.
+- `include/screen.h`: draws the whole screen from a plain data struct, shared by
+  the device and the PC preview.
+- `common/assets.yaml`: fonts and icons, shared the same way.
 - `web/`: the settings page (plain JS and CSS, embedded in the firmware).
 - `tools/gen_zones.py`: rebuilds the time zone table in `web/app.js` from tzdata.
+
+## Preview on your PC
+
+`preview/preview.yaml` builds the same screen for Linux with ESPHome's `host`
+platform and an SDL window, filled with demo data:
+
+```sh
+sudo apt install libsdl2-dev
+SCENE=ok esphome run preview/preview.yaml     # also: down, night, setup, weather
+```
+
+`tools/capture_screens.sh` regenerates every image above (needs Xvfb, ffmpeg,
+ImageMagick and gifsicle).
 
 ## Security notes
 

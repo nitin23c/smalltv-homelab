@@ -7,15 +7,17 @@
 #include <string>
 #include <vector>
 #include <ArduinoJson.h>
-#ifdef USE_ESP8266
+#if defined(USE_ESP8266)
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecureBearSSL.h>
-#else
+#elif defined(USE_ESP32)
 #include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #endif
+// On the host platform (preview/) there is no network code: the preview
+// fills the screen with demo data instead.
 #include "esphome/core/log.h"
 #include "esphome/components/display/display.h"
 #include "esphome/components/time/posix_tz.h"
@@ -47,6 +49,7 @@ static std::string trim_url(std::string u) {
   return u;
 }
 
+#ifndef USE_HOST
 // Opens url (http or https; https certificates are not checked) on a fresh client.
 class Request {
  public:
@@ -199,6 +202,15 @@ class Pihole {
   }
 };
 
+#else
+// Host build (preview): no networking.
+inline void fetch_gatus(const std::string &, Gatus &, size_t = 4) {}
+class Pihole {
+ public:
+  void fetch(const std::string &, const std::string &, PiholeStats &) {}
+};
+#endif  // USE_HOST
+
 // ---- Time zone and NTP, changeable at runtime ----------------------------
 
 namespace tzparse {
@@ -318,7 +330,7 @@ inline void apply_ntp_servers(const std::string &list_in) {
 // sector instead: at 2 MB, well clear of the sketch (first 1 MB) and of where
 // OTA updates are staged (just below 0x5FB000). Needs a 4 MB flash chip.
 namespace store {
-static const uint32_t SECTOR = 0x200000 / SPI_FLASH_SEC_SIZE;
+static const uint32_t SECTOR = 0x200000 / 4096;  // 4 KB flash sectors
 static const uint32_t MAGIC = 0x53545631;  // "STV1"
 static const size_t MAX_JSON = 2048;
 

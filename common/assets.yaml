@@ -1,0 +1,45 @@
+# Fonts and icons used by include/screen.h (device and preview).
+font:
+  # One family, one weight, five sizes.
+  - file: "gfonts://Inter@600"
+    id: font_time
+    size: 52
+    glyphs: "0123456789:"
+  - file: "gfonts://Inter@600"
+    id: font_temp
+    size: 24
+    glyphs: "-0123456789°.CF"
+  - file: "gfonts://Inter@600"
+    id: font_value
+    size: 22
+    glyphs: "0123456789%?.k"
+  - file: "gfonts://Inter@600"
+    id: font_text
+    size: 16
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u00b0\u00b7"
+  - file: "gfonts://Inter@600"
+    id: font_label
+    size: 12
+    glyphs: " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,'/&()"
+
+image:
+  - file: mdi:weather-sunny
+    id: icon_day
+    resize: 24x24
+    type: binary
+    transparency: chroma_key
+  - file: mdi:weather-night
+    id: icon_night
+    resize: 24x24
+    type: binary
+    transparency: chroma_key
+  - file: mdi:server-network
+    id: icon_services
+    resize: 14x14
+    type: binary
+    transparency: chroma_key
+  - file: mdi:pi-hole
+    id: icon_pihole
+    resize: 14x14
+    type: binary
+    transparency: chroma_key

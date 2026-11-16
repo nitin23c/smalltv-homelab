@@ -21,6 +21,7 @@ struct Weather {
 };
 inline Weather &state() { static Weather w; return w; }
 
+#ifndef USE_HOST
 // location: "lat,lon"; unit: "C" or "F".
 inline void fetch(const std::string &location, const std::string &unit) {
   auto &w = state();
@@ -60,6 +61,8 @@ inline void fetch(const std::string &location, const std::string &unit) {
   w.updated_ms = millis();
   ESP_LOGD(TAG, "%.1f %s, code %d", w.temp, unit.c_str(), w.code);
 }
+
+#endif  // USE_HOST
 
 enum Kind { CLEAR, PARTLY, CLOUDY, FOG, DRIZZLE, RAIN, SNOW, THUNDER, UNKNOWN };
 

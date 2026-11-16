@@ -1,0 +1,82 @@
+# Desktop preview of the screen, used to make the README images.
+# Runs the same drawing code (include/screen.h) on Linux in an SDL window,
+# with demo data instead of a network. Needs libsdl2-dev.
+#
+#   SCENE=ok esphome run preview/preview.yaml
+#
+# Scenes: ok, down, night, setup, weather (cycles through every weather icon).
+esphome:
+  name: smalltv-preview
+  includes:
+    - ../include/homelab_status.h
+    - ../include/weather_icon.h
+    - ../include/screen.h
+
+host:
+
+json:   # ArduinoJson, used by the shared headers
+
+logger:
+  level: INFO
+
+packages:
+  assets: !include ../common/assets.yaml
+
+time:
+  - platform: host
+    id: clock_time
+    timezone: UTC
+
+display:
+  - platform: sdl
+    id: screen
+    dimensions:
+      width: 240
+      height: 240
+    update_interval: 200ms
+    lambda: |-
+      static uint32_t frame = 0;
+      frame++;
+      const char *env = getenv("SCENE");
+      std::string scene = env ? env : "ok";
+
+      face::View v;
+      v.ap_password = "Q7KM2PX9TA";
+      v.label = "New York";
+      v.unit = "C";
+      v.wx_set = v.wx_ok = true;
+      v.g_set = v.g_fresh = true;
+      v.p_set = v.p_any = true;
+      v.up = 26; v.total = 26;
+      v.queries = 96350; v.blocked = 12804;
+      // Fixed demo times (shown as-is): Mon 16 Nov, 08:14 / 21:40 / 15:05
+      time_t t = 1794816840;
+      v.temp = 2; v.tmax = 12; v.tmin = -1; v.code = 0;
+      bool day = true;
+
+      if (scene == "down") {
+        t = 1794841500;
+        v.up = 24;
+        v.down = {"NAS backup", "Camera porch"};
+        v.temp = 9; v.tmax = 11; v.tmin = 4; v.code = 63;
+      } else if (scene == "night") {
+        t = 1794865200;
+        day = false;
+        v.label = "Reykjavik";
+        v.temp = -4; v.tmax = 1; v.tmin = -6; v.code = 0;
+        v.queries = 141200; v.blocked = 22950;
+      } else if (scene == "setup") {
+        v.wifi = false;
+      } else if (scene == "weather") {
+        // A new condition every 3 seconds.
+        static const int codes[] = {0, 2, 3, 61, 71, 95, 45};
+        static const float temps[] = {24, 18, 14, 11, -2, 19, 6};
+        int i = (frame / 15) % 7;
+        v.code = codes[i];
+        v.temp = temps[i]; v.tmax = temps[i] + 4; v.tmin = temps[i] - 5;
+      }
+      v.now = ESPTime::from_epoch_utc(t);
+      weather::render(v.code, day, frame);
+      static const face::Res res{id(font_time), id(font_temp), id(font_value), id(font_text), id(font_label),
+                                 id(icon_day), id(icon_night), id(icon_services), id(icon_pihole)};
+      face::draw(it, res, v);
