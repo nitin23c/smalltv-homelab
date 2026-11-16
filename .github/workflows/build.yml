@@ -1,0 +1,30 @@
+name: Build firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install ESPHome
+        run: pip install esphome
+      - name: Compile
+        run: |
+          cp secrets.example.yaml secrets.yaml
+          esphome compile smalltv.yaml
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: smalltv-firmware
+          path: .esphome/build/smalltv/.pioenvs/smalltv/firmware.factory.bin
+          if-no-files-found: warn

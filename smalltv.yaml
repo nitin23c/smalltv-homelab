@@ -1,0 +1,588 @@
+# ESPHome firmware for ESP8266 240x240 "SmallTV" / "Smart Weather Clock"
+# desk displays: a clock for one time zone, homelab health from Gatus and
+# today's block count from Pi-hole v6.
+#
+# Gatus and Pi-hole addresses and the Pi-hole password are set on the
+# device's own web page (http://<device-ip>/) and kept in its flash.
+substitutions:
+  name: smalltv
+  friendly_name: SmallTV
+  # Defaults until changed on the web page:
+  clock_label: "New York"
+  timezone: "America/New_York"   # any IANA zone, e.g. Europe/London
+  weather_location: "40.71,-74.01"   # latitude,longitude for the weather
+  # Shown on the screen only while the device has no Wi-Fi.
+  ap_password: !secret ap_password
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  includes:
+    - include/homelab_status.h
+    - include/weather_icon.h
+  on_boot:
+    priority: -100   # after SNTP has started
+    then:
+      - script.execute: load_settings
+      - script.execute: apply_clock
+
+esp8266:
+  board: esp12e
+
+logger:
+  baud_rate: 115200   # serial log over the USB-C cable
+
+wifi:
+  # No Wi-Fi details in the config: on first boot, join the "SmallTV Setup"
+  # hotspot (password on the screen) and pick your network.
+  ap:
+    ssid: "SmallTV Setup"
+    password: ${ap_password}
+
+captive_portal:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+web_server:
+  port: 80
+  version: 3
+  # Our own page (web/), served from the device; nothing loads from the internet.
+  js_url: ""
+  css_url: ""
+  js_include: web/app.js
+  css_include: web/app.css
+  sorting_groups:
+    - id: grp_status
+      name: "Status"
+      sorting_weight: 1
+    - id: grp_settings
+      name: "Settings"
+      sorting_weight: 2
+
+json:
+
+# Pulls in the HTTP and TLS client libraries used by homelab_status.h.
+http_request:
+  verify_ssl: false
+
+sensor:
+  - platform: template
+    id: weather_temp
+    name: "Weather temperature"
+    icon: mdi:thermometer
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: services_up
+    name: "Services up"
+    icon: mdi:check-network
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: template
+    id: services_total
+    name: "Services total"
+    icon: mdi:server-network
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: template
+    id: pihole_pct
+    name: "Pi-hole blocked percent"
+    icon: mdi:pi-hole
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: never
+  - platform: template
+    id: pihole_blocked
+    name: "Pi-hole blocked today"
+    icon: mdi:shield-off
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: template
+    id: pihole_queries
+    name: "Pi-hole queries today"
+    icon: mdi:dns
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+
+text_sensor:
+  - platform: template
+    id: weather_text
+    name: "Weather"
+    icon: mdi:weather-partly-cloudy
+    update_interval: never
+  - platform: wifi_info
+    ip_address:
+      id: wifi_ip
+      name: "IP address"
+  - platform: template
+    id: services_down
+    name: "Services down"
+    icon: mdi:alert-circle
+    update_interval: never
+  - platform: template
+    id: fetch_status
+    name: "Last check"
+    icon: mdi:information-outline
+    update_interval: never
+  - platform: template
+    id: clock_zone
+    name: "Clock"
+    icon: mdi:clock-outline
+    update_interval: never
+  - platform: template
+    id: device_time
+    name: "Device time"
+    icon: mdi:clock-check-outline
+    update_interval: 30s
+    lambda: |-
+      auto t = id(clock_time).now();
+      if (!t.is_valid()) return {"not synced"};
+      return t.strftime("%Y-%m-%d %H:%M");
+  - platform: version
+    name: "ESPHome version"
+    hide_timestamp: true
+
+time:
+  - platform: sntp
+    id: clock_time
+    timezone: ${timezone}   # used until a zone is picked on the web page
+
+text:
+  - platform: template
+    id: weather_location
+    name: "Weather location"
+    icon: mdi:map-marker-radius
+    mode: text
+    max_length: 40
+    optimistic: true
+    restore_value: false
+    initial_value: "${weather_location}"
+  - platform: template
+    id: temp_unit
+    name: "Temperature unit"
+    icon: mdi:thermometer
+    mode: text
+    max_length: 1
+    optimistic: true
+    restore_value: false
+    initial_value: "C"
+  - platform: template
+    id: clock_label_text
+    name: "Clock label"
+    icon: mdi:map-marker
+    mode: text
+    max_length: 20
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: "${clock_label}"
+  - platform: template
+    id: tz_name
+    name: "Time zone"
+    icon: mdi:earth
+    mode: text
+    max_length: 40
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: "${timezone}"
+  - platform: template
+    id: tz_rule
+    name: "Time zone rule"
+    icon: mdi:earth
+    mode: text
+    max_length: 64
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: ""
+  - platform: template
+    id: ntp_list
+    name: "NTP servers"
+    icon: mdi:clock-check
+    mode: text
+    max_length: 64
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: ""
+  - platform: template
+    id: gatus_url
+    name: "Gatus URL"
+    icon: mdi:list-status
+    mode: text
+    max_length: 64
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: ""
+    web_server:
+      sorting_group_id: grp_settings
+      sorting_weight: 1
+  - platform: template
+    id: pihole1_url
+    name: "Pi-hole 1 URL"
+    icon: mdi:pi-hole
+    mode: text
+    max_length: 64
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: ""
+    web_server:
+      sorting_group_id: grp_settings
+      sorting_weight: 2
+  - platform: template
+    id: pihole1_password
+    name: "Pi-hole 1 app password"
+    icon: mdi:key
+    mode: password
+    max_length: 64
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: ""
+    web_server:
+      sorting_group_id: grp_settings
+      sorting_weight: 3
+  - platform: template
+    id: pihole2_url
+    name: "Pi-hole 2 URL (optional)"
+    icon: mdi:pi-hole
+    mode: text
+    max_length: 64
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: ""
+    web_server:
+      sorting_group_id: grp_settings
+      sorting_weight: 4
+  - platform: template
+    id: pihole2_password
+    name: "Pi-hole 2 app password"
+    icon: mdi:key
+    mode: password
+    max_length: 64
+    optimistic: true
+    restore_value: false   # kept in the settings store instead
+    initial_value: ""
+    web_server:
+      sorting_group_id: grp_settings
+      sorting_weight: 5
+
+button:
+  - platform: template
+    name: "Save settings"
+    icon: mdi:content-save
+    on_press:
+      - script.execute: save_settings
+      - lambda: weather::state().updated_ms = 0;
+      - script.execute: apply_clock
+      - script.execute: refresh
+  - platform: restart
+    name: "Restart"
+
+script:
+  # Every text setting, by the key used in the settings store.
+  - id: load_settings
+    then:
+      - lambda: |-
+          std::vector<std::pair<const char *, text::Text *>> fields = {
+            {"label", id(clock_label_text)}, {"tz", id(tz_name)}, {"tz_rule", id(tz_rule)},
+            {"ntp", id(ntp_list)}, {"gatus", id(gatus_url)},
+            {"wx_loc", id(weather_location)}, {"wx_unit", id(temp_unit)},
+            {"ph1", id(pihole1_url)}, {"ph1_pw", id(pihole1_password)},
+            {"ph2", id(pihole2_url)}, {"ph2_pw", id(pihole2_password)}};
+          homelab::store::Settings kv;
+          if (!homelab::store::read(kv)) {
+            ESP_LOGI("homelab", "No saved settings yet; using defaults");
+            return;
+          }
+          for (auto &f : fields)
+            for (auto &p : kv)
+              if (p.first == f.first) f.second->publish_state(p.second);
+          ESP_LOGI("homelab", "Settings loaded");
+  - id: save_settings
+    then:
+      - lambda: |-
+          homelab::store::Settings kv = {
+            {"label", id(clock_label_text).state}, {"tz", id(tz_name).state}, {"tz_rule", id(tz_rule).state},
+            {"ntp", id(ntp_list).state}, {"gatus", id(gatus_url).state},
+            {"wx_loc", id(weather_location).state}, {"wx_unit", id(temp_unit).state},
+            {"ph1", id(pihole1_url).state}, {"ph1_pw", id(pihole1_password).state},
+            {"ph2", id(pihole2_url).state}, {"ph2_pw", id(pihole2_password).state}};
+          homelab::store::write(kv);
+  - id: apply_clock
+    then:
+      - lambda: |-
+          if (!id(tz_rule).state.empty() && !homelab::apply_timezone(id(tz_rule).state))
+            ESP_LOGW("homelab", "Time zone rule not understood, keeping the previous zone");
+          homelab::apply_ntp_servers(id(ntp_list).state);
+          std::string tz = id(tz_rule).state.empty() ? "${timezone}" : id(tz_name).state;
+          id(clock_zone).publish_state(id(clock_label_text).state + "|" + tz);
+          id(screen).update();
+  - id: refresh
+    mode: single
+    then:
+      - lambda: |-
+          if (!wifi::global_wifi_component->is_connected()) return;
+          // Weather every 10 minutes (or right after Save)
+          auto &w = weather::state();
+          if (w.updated_ms == 0 || millis() - w.updated_ms > 10 * 60 * 1000) {
+            weather::fetch(id(weather_location).state, id(temp_unit).state);
+            if (w.ok) {
+              id(weather_temp).publish_state(w.temp);
+              id(weather_text).publish_state(weather::describe(w.code));
+            }
+          }
+          auto &g = homelab::gatus();
+          homelab::fetch_gatus(id(gatus_url).state, g);
+          for (int i = 0; i < 2; i++) {
+            auto &url = i == 0 ? id(pihole1_url).state : id(pihole2_url).state;
+            auto &pw = i == 0 ? id(pihole1_password).state : id(pihole2_password).state;
+            homelab::pihole(i).fetch(url, pw, homelab::pihole_stats(i));
+          }
+          if (g.ok) {
+            id(services_up).publish_state(g.up);
+            id(services_total).publish_state(g.total);
+            std::string names;
+            for (auto &n : g.down) names += (names.empty() ? "" : ", ") + n;
+            id(services_down).publish_state(names);
+          }
+          long q = 0, b = 0;
+          bool any = false;
+          for (int i = 0; i < 2; i++) {
+            auto &s = homelab::pihole_stats(i);
+            if (s.ok) { q += s.queries; b += s.blocked; any = true; }
+          }
+          if (any) {
+            id(pihole_queries).publish_state(q);
+            id(pihole_blocked).publish_state(b);
+            id(pihole_pct).publish_state(q > 0 ? 100.0f * b / q : 0);
+          }
+          auto st = [](const std::string &url, bool ok) { return url.empty() ? "not set" : (ok ? "OK" : "error"); };
+          char buf[96];
+          snprintf(buf, sizeof(buf), "Gatus %s, Pi-hole 1 %s, Pi-hole 2 %s",
+                   st(id(gatus_url).state, g.ok), st(id(pihole1_url).state, homelab::pihole_stats(0).ok),
+                   st(id(pihole2_url).state, homelab::pihole_stats(1).ok));
+          id(fetch_status).publish_state(buf);
+          id(screen).update();
+
+interval:
+  # Animate the weather icon: only its 48x48 corner is sent to the panel.
+  - interval: 200ms
+    then:
+      - lambda: |-
+          static uint32_t frame = 0;
+          if (!wifi::global_wifi_component->is_connected() || !weather::state().ok) return;
+          auto &w = weather::state();
+          weather::render(w.code, w.is_day, ++frame);
+          weather::push(*id(screen), 186, 32);
+  - interval: 60s
+    startup_delay: 10s
+    then:
+      - script.execute: refresh
+
+spi:
+  clk_pin: GPIO14
+  mosi_pin: GPIO13
+
+output:
+  - platform: esp8266_pwm
+    id: backlight_pwm
+    pin: GPIO5
+    inverted: true
+
+light:
+  - platform: monochromatic
+    name: Backlight
+    output: backlight_pwm
+    restore_mode: RESTORE_DEFAULT_ON
+
+font:
+  # One family, one weight, five sizes.
+  - file: "gfonts://Inter@600"
+    id: font_time
+    size: 52
+    glyphs: "0123456789:"
+  - file: "gfonts://Inter@600"
+    id: font_temp
+    size: 24
+    glyphs: "-0123456789°."
+  - file: "gfonts://Inter@600"
+    id: font_value
+    size: 22
+    glyphs: "0123456789%?.k"
+  - file: "gfonts://Inter@600"
+    id: font_text
+    size: 16
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u00b0\u00b7"
+  - file: "gfonts://Inter@600"
+    id: font_label
+    size: 12
+    glyphs: " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,'/&()"
+
+image:
+  - file: mdi:weather-sunny
+    id: icon_day
+    resize: 24x24
+    type: binary
+    transparency: chroma_key
+  - file: mdi:weather-night
+    id: icon_night
+    resize: 24x24
+    type: binary
+    transparency: chroma_key
+  - file: mdi:server-network
+    id: icon_services
+    resize: 14x14
+    type: binary
+    transparency: chroma_key
+  - file: mdi:pi-hole
+    id: icon_pihole
+    resize: 14x14
+    type: binary
+    transparency: chroma_key
+
+display:
+  - platform: mipi_spi
+    id: screen
+    model: ST7789V
+    dc_pin: GPIO0
+    reset_pin: GPIO2
+    dimensions:
+      width: 240
+      height: 240
+    invert_colors: true
+    color_depth: 16
+    data_rate: 40MHz
+    update_interval: 15s
+    lambda: |-
+      // Palette. This panel exaggerates very dark colours, so the background
+      // is true black and cards are outlines.
+      const Color bg(0, 0, 0), card_bg(0, 0, 0), card_line(52, 60, 78), track(44, 50, 66);
+      const Color text(242, 244, 248), dim(150, 158, 175), accent(94, 200, 255);
+      const Color amber(255, 190, 60), lavender(170, 160, 255);
+      const Color green(52, 211, 153), red(248, 98, 98), pihole(240, 70, 110);
+
+      it.fill(bg);
+      if (!wifi::global_wifi_component->is_connected()) {
+        homelab::card(it, 10, 10, 220, 220, 16, card_bg, card_line);
+        it.print(120, 34, id(font_label), accent, TextAlign::CENTER, "WI-FI SETUP");
+        it.print(120, 72, id(font_text), dim, TextAlign::CENTER, "Join the hotspot");
+        it.print(120, 96, id(font_text), text, TextAlign::CENTER, "SmallTV Setup");
+        it.print(120, 134, id(font_text), dim, TextAlign::CENTER, "Password");
+        it.print(120, 158, id(font_text), text, TextAlign::CENTER, "${ap_password}");
+        it.print(120, 198, id(font_text), dim, TextAlign::CENTER, "then open 192.168.4.1");
+        return;
+      }
+      const uint32_t stale_ms = 5 * 60 * 1000;
+
+      // ---- Header: day/night icon, city, date --------------------------------
+      auto now = id(clock_time).now();
+      bool day = now.is_valid() ? (now.hour >= 6 && now.hour < 18) : true;
+      it.image(8, 7, day ? id(icon_day) : id(icon_night), day ? amber : lavender);
+      // Date on the right; the city name is shortened to keep a gap before it.
+      int date_w = 0;
+      if (now.is_valid()) {
+        char date[16];
+        now.strftime(date, sizeof(date), "%a %d");
+        int bx, by, bh;
+        it.get_text_bounds(232, 19, date, id(font_text), TextAlign::CENTER_RIGHT, &bx, &by, &date_w, &bh);
+        it.print(232, 19, id(font_text), dim, TextAlign::CENTER_RIGHT, date);
+      }
+      std::string label = id(clock_label_text).state;  // shown as typed
+      const int max_w = 232 - date_w - 14 - 38;
+      for (bool cut = false;; cut = true) {
+        std::string shown = cut ? label + "." : label;
+        int bx, by, bw, bh;
+        it.get_text_bounds(38, 19, shown.c_str(), id(font_text), TextAlign::CENTER_LEFT, &bx, &by, &bw, &bh);
+        if (bw <= max_w || label.size() <= 1) {
+          it.print(38, 19, id(font_text), accent, TextAlign::CENTER_LEFT, shown.c_str());
+          break;
+        }
+        label.pop_back();
+        while (!label.empty() && label.back() == ' ') label.pop_back();
+      }
+
+      // ---- Time + AM/PM ------------------------------------------------------
+      if (now.is_valid()) {
+        char hm[8];
+        now.strftime(hm, sizeof(hm), "%I:%M");
+        int x1, y1, w1, h1;
+        it.get_text_bounds(8, 40, hm, id(font_time), TextAlign::TOP_LEFT, &x1, &y1, &w1, &h1);
+        it.print(8, 40, id(font_time), text, TextAlign::TOP_LEFT, hm);
+        it.strftime(8 + w1 + 5, 50, id(font_text), accent, TextAlign::TOP_LEFT, "%p", now);
+      } else {
+        it.print(8, 60, id(font_text), dim, TextAlign::TOP_LEFT, "Getting time...");
+      }
+
+      // ---- Weather: icon (animated separately), temperature, conditions ----
+      auto &w = weather::state();
+      if (w.ok) {
+        weather::draw(it, 186, 32);
+        auto deg = [](float v) { int r = (int) lroundf(v); return r == 0 ? 0 : r; };  // no "-0"
+        it.printf(210, 80, id(font_temp), text, TextAlign::TOP_CENTER, "%d°", deg(w.temp));
+        it.print(8, 110, id(font_text), dim, TextAlign::TOP_LEFT, weather::describe(w.code));
+        it.printf(232, 110, id(font_text), dim, TextAlign::TOP_RIGHT, "H %d°  L %d°", deg(w.tmax), deg(w.tmin));
+      } else if (!id(weather_location).state.empty()) {
+        it.print(210, 62, id(font_text), dim, TextAlign::CENTER, "...");
+      }
+
+      // ---- Day progress bar ---------------------------------------------------
+      if (now.is_valid()) {
+        int w_bar = 224 * (now.hour * 60 + now.minute) / 1440;
+        homelab::rounded_box(it, 8, 130, 224, 4, 2, track);
+        if (w_bar > 4) homelab::rounded_box(it, 8, 130, w_bar, 4, 2, day ? amber : lavender);
+      }
+
+      // ---- Services card (Gatus) -----------------------------------------
+      const int cy = 189;
+      auto &g = homelab::gatus();
+      bool g_set = !id(gatus_url).state.empty();
+      bool g_fresh = g.updated_ms != 0 && millis() - g.updated_ms < stale_ms;
+      bool g_bad = g_fresh && g.up < g.total;
+      Color g_col = !g_fresh ? dim : (g_bad ? red : green);
+      homelab::card(it, 6, 140, 112, 98, 12, card_bg, g_bad ? red : card_line);
+      it.image(14, 144, id(icon_services), g_bad ? red : dim);
+      it.print(32, 151, id(font_label), g_bad ? red : dim, TextAlign::CENTER_LEFT, "SERVICES");
+      float g_pct = g_fresh && g.total > 0 ? 100.0f * g.up / g.total : 0;
+      homelab::gauge(it, 62, cy, 30, 25, g_pct, track, g_col);
+      if (!g_set || !g_fresh) {
+        it.print(62, cy, id(font_value), dim, TextAlign::CENTER, "?");
+        it.print(62, 227, id(font_text), dim, TextAlign::CENTER, g_set ? "No data" : "Not set");
+      } else {
+        it.printf(62, cy - 5, id(font_value), text, TextAlign::CENTER, "%d", g.up);
+        it.printf(62, cy + 12, id(font_label), dim, TextAlign::CENTER, "OF %d", g.total);
+        if (!g_bad) {
+          it.print(62, 227, id(font_text), green, TextAlign::CENTER, "All up");
+        } else if (!g.down.empty()) {
+          std::string n = g.down[(now.is_valid() ? now.timestamp / 15 : 0) % g.down.size()];
+          if (n.size() > 13) n = n.substr(0, 12) + ".";
+          it.print(62, 227, id(font_text), red, TextAlign::CENTER, n.c_str());
+        }
+      }
+
+      // ---- Pi-hole card ----------------------------------------------------
+      long queries = 0, blocked = 0;
+      bool any = false;
+      for (int i = 0; i < 2; i++) {
+        auto &s = homelab::pihole_stats(i);
+        if (s.updated_ms != 0 && millis() - s.updated_ms < stale_ms) {
+          queries += s.queries;
+          blocked += s.blocked;
+          any = true;
+        }
+      }
+      bool p_set = !id(pihole1_url).state.empty() || !id(pihole2_url).state.empty();
+      homelab::card(it, 122, 140, 112, 98, 12, card_bg, card_line);
+      it.image(130, 144, id(icon_pihole), any ? pihole : dim);
+      it.print(148, 151, id(font_label), dim, TextAlign::CENTER_LEFT, "PI-HOLE");
+      float pct = any && queries > 0 ? 100.0f * blocked / queries : 0;
+      homelab::gauge(it, 178, cy, 30, 25, pct, track, pihole);
+      if (!p_set || !any) {
+        it.print(178, cy, id(font_value), dim, TextAlign::CENTER, "?");
+        it.print(178, 227, id(font_text), dim, TextAlign::CENTER, p_set ? "No data" : "Not set");
+      } else {
+        it.printf(178, cy, id(font_value), text, TextAlign::CENTER, "%.0f%%", pct);
+        it.printf(178, 227, id(font_text), dim, TextAlign::CENTER, "%s blocked",
+                  homelab::short_count(blocked).c_str());
+      }
