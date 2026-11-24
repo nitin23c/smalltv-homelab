@@ -157,6 +157,17 @@ time:
     id: clock_time
     timezone: ${timezone}   # used until a zone is picked on the web page
 
+# Pi-hole app passwords live only here (filled from the settings store). The
+# password text entities are write-only inputs and always read empty, so the
+# passwords never reach Home Assistant or the web page's event stream.
+globals:
+  - id: ph1_pw
+    type: std::string
+    restore_value: false
+  - id: ph2_pw
+    type: std::string
+    restore_value: false
+
 text:
   - platform: template
     id: weather_location
@@ -242,9 +253,11 @@ text:
     icon: mdi:key
     mode: password
     max_length: 64
-    optimistic: true
+    optimistic: false   # write-only: the state stays empty
     restore_value: false   # kept in the settings store instead
     initial_value: ""
+    set_action:
+      - lambda: 'if (!x.empty()) id(ph1_pw) = x;'
     web_server:
       sorting_group_id: grp_settings
       sorting_weight: 3
@@ -266,9 +279,11 @@ text:
     icon: mdi:key
     mode: password
     max_length: 64
-    optimistic: true
+    optimistic: false   # write-only: the state stays empty
     restore_value: false   # kept in the settings store instead
     initial_value: ""
+    set_action:
+      - lambda: 'if (!x.empty()) id(ph2_pw) = x;'
     web_server:
       sorting_group_id: grp_settings
       sorting_weight: 5
@@ -294,8 +309,7 @@ script:
             {"label", id(clock_label_text)}, {"tz", id(tz_name)}, {"tz_rule", id(tz_rule)},
             {"ntp", id(ntp_list)}, {"gatus", id(gatus_url)},
             {"wx_loc", id(weather_location)}, {"wx_unit", id(temp_unit)},
-            {"ph1", id(pihole1_url)}, {"ph1_pw", id(pihole1_password)},
-            {"ph2", id(pihole2_url)}, {"ph2_pw", id(pihole2_password)}};
+            {"ph1", id(pihole1_url)}, {"ph2", id(pihole2_url)}};
           homelab::store::Settings kv;
           if (!homelab::store::read(kv)) {
             ESP_LOGI("homelab", "No saved settings yet; using defaults");
@@ -304,6 +318,10 @@ script:
           for (auto &f : fields)
             for (auto &p : kv)
               if (p.first == f.first) f.second->publish_state(p.second);
+          for (auto &p : kv) {
+            if (p.first == "ph1_pw") id(ph1_pw) = p.second;
+            if (p.first == "ph2_pw") id(ph2_pw) = p.second;
+          }
           ESP_LOGI("homelab", "Settings loaded");
   - id: save_settings
     then:
@@ -312,8 +330,8 @@ script:
             {"label", id(clock_label_text).state}, {"tz", id(tz_name).state}, {"tz_rule", id(tz_rule).state},
             {"ntp", id(ntp_list).state}, {"gatus", id(gatus_url).state},
             {"wx_loc", id(weather_location).state}, {"wx_unit", id(temp_unit).state},
-            {"ph1", id(pihole1_url).state}, {"ph1_pw", id(pihole1_password).state},
-            {"ph2", id(pihole2_url).state}, {"ph2_pw", id(pihole2_password).state}};
+            {"ph1", id(pihole1_url).state}, {"ph1_pw", id(ph1_pw)},
+            {"ph2", id(pihole2_url).state}, {"ph2_pw", id(ph2_pw)}};
           homelab::store::write(kv);
   - id: apply_clock
     then:
@@ -342,7 +360,7 @@ script:
           homelab::fetch_gatus(id(gatus_url).state, g);
           for (int i = 0; i < 2; i++) {
             auto &url = i == 0 ? id(pihole1_url).state : id(pihole2_url).state;
-            auto &pw = i == 0 ? id(pihole1_password).state : id(pihole2_password).state;
+            auto &pw = i == 0 ? id(ph1_pw) : id(ph2_pw);
             homelab::pihole(i).fetch(url, pw, homelab::pihole_stats(i));
           }
           if (g.ok) {

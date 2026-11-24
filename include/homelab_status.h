@@ -272,7 +272,7 @@ inline bool rule(const char *&p, esphome::time::DSTRule &r) {
 inline bool apply_timezone(const std::string &posix) {
   using namespace esphome::time;
   if (posix.empty()) return false;
-  ParsedTimezone tz{};
+  esphome::time::ParsedTimezone tz{};  // qualified: esphome::api has one too
   const char *p = posix.c_str();
   if (!tzparse::name(p) || !tzparse::offset(p, tz.std_offset_seconds)) return false;
   tz.dst_offset_seconds = tz.std_offset_seconds;
